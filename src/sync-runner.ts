@@ -95,25 +95,36 @@ export class SyncRunner {
   ) {}
 
   async run(): Promise<void> {
-    const lockClient = await this.pool.connect();
+    const useAdvisoryLock = this.config.postgres.lock_strategy === "advisory";
+    const lockClient = useAdvisoryLock ? await this.pool.connect() : null;
     let lockAcquired = false;
     const failedModels: string[] = [];
 
     try {
-      const result = await lockClient.query<{ acquired: boolean }>(
-        "SELECT pg_try_advisory_lock($1) AS acquired",
-        [GLOBAL_ADVISORY_LOCK_ID],
-      );
+      if (useAdvisoryLock) {
+        if (!lockClient) {
+          throw new Error("Failed to initialize advisory lock client.");
+        }
 
-      lockAcquired = result.rows[0]?.acquired === true;
-      if (!lockAcquired) {
-        this.logger.warn("Another sync process holds the advisory lock; exiting.", {
-          lockId: GLOBAL_ADVISORY_LOCK_ID,
+        const result = await lockClient.query<{ acquired: boolean }>(
+          "SELECT pg_try_advisory_lock($1) AS acquired",
+          [GLOBAL_ADVISORY_LOCK_ID],
+        );
+
+        lockAcquired = result.rows[0]?.acquired === true;
+        if (!lockAcquired) {
+          this.logger.warn("Another sync process holds the advisory lock; exiting.", {
+            lockId: GLOBAL_ADVISORY_LOCK_ID,
+          });
+          return;
+        }
+
+        this.logger.info("Acquired advisory lock.", { lockId: GLOBAL_ADVISORY_LOCK_ID });
+      } else {
+        this.logger.info("Skipping advisory lock due to configured lock strategy.", {
+          lockStrategy: this.config.postgres.lock_strategy,
         });
-        return;
       }
-
-      this.logger.info("Acquired advisory lock.", { lockId: GLOBAL_ADVISORY_LOCK_ID });
 
       for (const model of this.config.models) {
         const success = await this.runModel(model);
@@ -126,10 +137,10 @@ export class SyncRunner {
         throw new Error(`One or more model syncs failed: ${failedModels.join(", ")}`);
       }
     } finally {
-      if (lockAcquired) {
+      if (lockClient && lockAcquired) {
         await lockClient.query("SELECT pg_advisory_unlock($1)", [GLOBAL_ADVISORY_LOCK_ID]);
       }
-      lockClient.release();
+      lockClient?.release();
     }
   }
 

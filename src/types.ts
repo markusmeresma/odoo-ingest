@@ -10,12 +10,30 @@ export interface OdooConfig {
   api_key: string;
 }
 
-export interface PostgresConfig {
+export type PostgresSslMode = "disable" | "require";
+
+export type PostgresLockStrategy = "advisory" | "none";
+
+export interface PostgresUrlConnection {
+  type: "url";
+  url: string;
+}
+
+export interface PostgresParamsConnection {
+  type: "params";
   host: string;
   port: number;
   database: string;
   user: string;
   password: string;
+}
+
+export type PostgresConnection = PostgresUrlConnection | PostgresParamsConnection;
+
+export interface PostgresConfig {
+  connection: PostgresConnection;
+  ssl_mode: PostgresSslMode;
+  lock_strategy: PostgresLockStrategy;
 }
 
 export interface SyncConfig {

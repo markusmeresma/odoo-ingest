@@ -2,13 +2,23 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
 
-import type { AppConfig, JsonValue, ModelConfig, OdooDomain } from "./types";
+import type {
+  AppConfig,
+  JsonValue,
+  ModelConfig,
+  OdooDomain,
+  PostgresConnection,
+  PostgresSslMode,
+} from "./types";
 
 const DEFAULT_CURSOR_FIELD = "write_date";
 const DEFAULT_OVERLAP_SECONDS = 120;
 const DEFAULT_PAGE_SIZE = 500;
 
 type UnknownRecord = Record<string, unknown>;
+const POSTGRES_CONNECTION_TYPES = ["url", "params"] as const;
+const POSTGRES_SSL_MODES = ["disable", "require"] as const;
+const POSTGRES_LOCK_STRATEGIES = ["advisory", "none"] as const;
 
 function asRecord(value: unknown, fieldName: string): UnknownRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -55,6 +65,13 @@ function requiredStringArray(value: unknown, fieldName: string): string[] {
   return value.map((entry, index) => requiredString(entry, `${fieldName}[${index}]`));
 }
 
+function requiredEnum<T extends string>(value: unknown, fieldName: string, allowedValues: readonly T[]): T {
+  if (typeof value !== "string" || !allowedValues.includes(value as T)) {
+    throw new Error(`Expected ${fieldName} to be one of: ${allowedValues.join(", ")}.`);
+  }
+  return value as T;
+}
+
 function optionalDomain(value: unknown, fieldName: string): OdooDomain {
   if (value === undefined) {
     return [];
@@ -99,6 +116,7 @@ export async function loadConfig(configPath: string): Promise<AppConfig> {
 
   const odoo = asRecord(config.odoo, "odoo");
   const postgres = asRecord(config.postgres, "postgres");
+  const postgresConnection = asRecord(postgres.connection, "postgres.connection");
   const sync = asRecord(config.sync, "sync");
 
   const odooApiKey = process.env.ODOO_API_KEY;
@@ -106,10 +124,63 @@ export async function loadConfig(configPath: string): Promise<AppConfig> {
     throw new Error("Missing required environment variable ODOO_API_KEY.");
   }
 
-  const postgresPassword = process.env.POSTGRES_PASSWORD;
-  if (!postgresPassword || postgresPassword.trim() === "") {
-    throw new Error("Missing required environment variable POSTGRES_PASSWORD.");
+  const connectionType = requiredEnum(
+    postgresConnection.type,
+    "postgres.connection.type",
+    POSTGRES_CONNECTION_TYPES,
+  );
+
+  let connection: PostgresConnection;
+  let defaultSslMode: PostgresSslMode;
+
+  if (connectionType === "url") {
+    const configuredUrl =
+      typeof postgresConnection.url === "string" && postgresConnection.url.trim() !== ""
+        ? postgresConnection.url
+        : undefined;
+    const urlFromEnv = process.env.DATABASE_URL;
+    const connectionUrl = configuredUrl ?? urlFromEnv;
+
+    if (!connectionUrl || connectionUrl.trim() === "") {
+      throw new Error("Missing postgres.connection.url. You can also set DATABASE_URL.");
+    }
+
+    connection = {
+      type: "url",
+      url: connectionUrl,
+    };
+    defaultSslMode = "require";
+  } else {
+    const passwordEnvNameRaw = postgresConnection.password_env ?? "POSTGRES_PASSWORD";
+    const passwordEnvName = requiredString(passwordEnvNameRaw, "postgres.connection.password_env");
+    const postgresPassword = process.env[passwordEnvName];
+
+    if (!postgresPassword || postgresPassword.trim() === "") {
+      throw new Error(`Missing required environment variable ${passwordEnvName}.`);
+    }
+
+    connection = {
+      type: "params",
+      host: requiredString(postgresConnection.host, "postgres.connection.host"),
+      port: requiredPositiveInteger(postgresConnection.port, "postgres.connection.port"),
+      database: requiredString(postgresConnection.database, "postgres.connection.database"),
+      user: requiredString(postgresConnection.user, "postgres.connection.user"),
+      password: postgresPassword,
+    };
+    defaultSslMode = "disable";
   }
+
+  const sslMode = requiredEnum(
+    postgres.ssl_mode ?? defaultSslMode,
+    "postgres.ssl_mode",
+    POSTGRES_SSL_MODES,
+  );
+
+  const lockStrategy = requiredEnum(
+    postgres.lock_strategy ?? "advisory",
+    "postgres.lock_strategy",
+    POSTGRES_LOCK_STRATEGIES,
+  );
 
   return {
     odoo: {
@@ -119,11 +190,9 @@ export async function loadConfig(configPath: string): Promise<AppConfig> {
       api_key: odooApiKey,
     },
     postgres: {
-      host: requiredString(postgres.host, "postgres.host"),
-      port: requiredPositiveInteger(postgres.port, "postgres.port"),
-      database: requiredString(postgres.database, "postgres.database"),
-      user: requiredString(postgres.user, "postgres.user"),
-      password: postgresPassword,
+      connection,
+      ssl_mode: sslMode,
+      lock_strategy: lockStrategy,
     },
     sync: {
       request_timeout_seconds: requiredPositiveInteger(sync.request_timeout_seconds, "sync.request_timeout_seconds"),
