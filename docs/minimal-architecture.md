@@ -177,9 +177,7 @@ models:
       - date_order
       - partner_id
       - partner_invoice_id
-      - partner_shipping_id
       - user_id
-      - team_id
       - company_id
       - currency_id
       - pricelist_id
@@ -187,8 +185,6 @@ models:
       - amount_tax
       - amount_total
       - invoice_status
-      - note
-      - origin
       - client_order_ref
       - write_date
       - create_date
@@ -219,22 +215,8 @@ models:
     fields:
       - id
       - name
-      - display_name
-      - email
-      - phone
-      - mobile
-      - street
-      - street2
-      - city
-      - state_id
       - zip
       - country_id
-      - vat
-      - company_type
-      - is_company
-      - parent_id
-      - customer_rank
-      - supplier_rank
       - active
       - lang
       - write_date
@@ -286,8 +268,6 @@ models:
       - type
       - stage_id
       - partner_id
-      - user_id
-      - team_id
       - expected_revenue
       - probability
       - date_deadline
@@ -295,11 +275,6 @@ models:
       - date_closed
       - priority
       - active
-      - lost_reason_id
-      - company_id
-      - email_from
-      - phone
-      - city
       - write_date
       - create_date
     domain: []
