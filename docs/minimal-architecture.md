@@ -36,7 +36,9 @@ This connector does the following:
 - Rationale: simpler failure model and robust restart behavior.
 
 2. Sync runner
-- Acquires global lock via `pg_advisory_lock()` with a fixed lock ID. Auto-releases on process exit/disconnect.
+- Uses configurable lock strategy:
+  - `advisory`: acquires a fixed global advisory lock.
+  - `none`: skips locking (for environments like PgBouncer transaction pooling).
 - Reads model configs.
 - Runs each model sync loop sequentially.
 
@@ -135,12 +137,13 @@ SQL is defined in `sql/001_init.sql`.
 
 ### Secrets via environment variables
 
-The following environment variables are **required** and must be set before running the connector:
+The following environment variable is **required**:
 
 - `ODOO_API_KEY` — Odoo API key for JSON-RPC authentication.
-- `POSTGRES_PASSWORD` — Postgres password for the ingest database.
 
-Secrets are never stored in the YAML config file.
+For Postgres:
+- In `postgres.connection.type: "params"`, `password_env` points to the required env var (for example `POSTGRES_PASSWORD`).
+- In `postgres.connection.type: "url"`, `url` can be supplied directly or read from `DATABASE_URL`.
 
 ### Config YAML
 
@@ -152,11 +155,24 @@ odoo:
   # API key via ODOO_API_KEY env var
 
 postgres:
-  host: "localhost"
-  port: 5432
-  database: "ingest_db"
-  user: "ingest_user"
-  # password via POSTGRES_PASSWORD env var
+  connection:
+    # Local/self-hosted Postgres
+    type: "params"
+    host: "localhost"
+    port: 5432
+    database: "ingest_db"
+    user: "ingest_user"
+    password_env: "POSTGRES_PASSWORD"
+
+    # Supabase/managed Postgres (alternative mode):
+    # type: "url"
+    # url: "postgresql://postgres:password@host:5432/postgres"
+    # If url is omitted in "url" mode, DATABASE_URL is used.
+
+  # "disable" for local Postgres, "require" for managed providers.
+  ssl_mode: "disable"
+  # "none" for transaction-pooled connections that do not support advisory locks.
+  lock_strategy: "advisory"
 
 sync:
   request_timeout_seconds: 60
@@ -305,12 +321,13 @@ models:
 
 ## Minimal run lifecycle
 
-1. Acquire global lock via `pg_advisory_lock(<fixed_lock_id>)`. If another process holds the lock, the call blocks until it is released (or use `pg_try_advisory_lock` to exit immediately).
-2. Insert `odoo_sync_runs` row with `status=running`.
-3. Execute model loops.
-4. Update run counters while processing.
-5. Mark `success` or `failed` and persist error text.
-6. Lock auto-releases on disconnect/process exit.
+1. If `lock_strategy` is `advisory`, attempt `pg_try_advisory_lock(<fixed_lock_id>)`; if unavailable, exit immediately.
+2. If `lock_strategy` is `none`, skip lock acquisition.
+3. Insert `odoo_sync_runs` row with `status=running`.
+4. Execute model loops.
+5. Update run counters while processing.
+6. Mark `success` or `failed` and persist error text.
+7. If acquired, release advisory lock before shutdown.
 
 ## Operational policies
 

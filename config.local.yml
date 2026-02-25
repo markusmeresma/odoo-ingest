@@ -6,7 +6,6 @@ odoo:
 
 postgres:
   connection:
-    # Local/self-hosted Postgres
     type: "params"
     host: "localhost"
     port: 5432
@@ -14,14 +13,7 @@ postgres:
     user: "ingest_user"
     password_env: "POSTGRES_PASSWORD"
 
-    # Supabase or other hosted Postgres:
-    # type: "url"
-    # url: "postgresql://postgres:password@host:5432/postgres"
-    # If url is omitted in "url" mode, DATABASE_URL is used.
-
-  # "disable" for local Postgres, "require" for managed providers (for example Supabase).
   ssl_mode: "disable"
-  # Use "none" for PgBouncer transaction pooling (for example Supabase transaction pooler).
   lock_strategy: "advisory"
 
 sync:

@@ -3,6 +3,7 @@ import "dotenv/config";
 import { parseArgs } from "node:util";
 
 import { Pool } from "pg";
+import type { PoolConfig } from "pg";
 
 import { loadConfig } from "./config";
 import { createLogger } from "./logger";
@@ -10,9 +11,32 @@ import { OdooClient } from "./odoo-client";
 import { RawRecordStore } from "./raw-record-store";
 import { StateStore } from "./state-store";
 import { SyncRunner } from "./sync-runner";
+import type { AppConfig } from "./types";
 
 function usage(): string {
   return "Usage: node dist/cli.js sync --config <path-to-config.yml>";
+}
+
+function buildPoolConfig(config: AppConfig): PoolConfig {
+  const poolConfig: PoolConfig = {};
+
+  if (config.postgres.connection.type === "url") {
+    poolConfig.connectionString = config.postgres.connection.url;
+  } else {
+    poolConfig.host = config.postgres.connection.host;
+    poolConfig.port = config.postgres.connection.port;
+    poolConfig.database = config.postgres.connection.database;
+    poolConfig.user = config.postgres.connection.user;
+    poolConfig.password = config.postgres.connection.password;
+  }
+
+  if (config.postgres.ssl_mode === "require") {
+    poolConfig.ssl = {
+      rejectUnauthorized: false,
+    };
+  }
+
+  return poolConfig;
 }
 
 async function main(): Promise<void> {
@@ -40,13 +64,7 @@ async function main(): Promise<void> {
 
   const config = await loadConfig(configPath);
 
-  const pool = new Pool({
-    host: config.postgres.host,
-    port: config.postgres.port,
-    database: config.postgres.database,
-    user: config.postgres.user,
-    password: config.postgres.password,
-  });
+  const pool = new Pool(buildPoolConfig(config));
 
   try {
     const odooClient = new OdooClient(config.odoo, config.sync, createLogger({ component: "odoo-client" }));
