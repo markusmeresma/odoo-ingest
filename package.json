@@ -1,0 +1,24 @@
+{
+  "name": "odoo-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Incremental data ingestion from Odoo via JSON-RPC into Postgres JSONB.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "sync": "node dist/cli.js sync --config config.example.yml"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "js-yaml": "^4.1.0",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.13.10",
+    "@types/pg": "^8.11.11",
+    "typescript": "^5.8.2"
+  }
+}
