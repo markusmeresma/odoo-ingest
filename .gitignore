@@ -134,6 +134,11 @@ dist
 !.yarn/sdks
 !.yarn/versions
 
+# Config files (only config.example.yml is tracked)
+config.smoke.yml
+config.local.yml
+config.supabase.yml
+
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
