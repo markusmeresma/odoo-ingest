@@ -204,7 +204,7 @@ models:
       - client_order_ref
       - write_date
       - create_date
-    domain: []
+    domain: [["state", "in", ["sale", "done"]]]
 
   - name: "sale.order.line"
     fields:
@@ -225,7 +225,7 @@ models:
       - state
       - write_date
       - create_date
-    domain: []
+    domain: [["state", "in", ["sale", "done"]]]
 
   - name: "res.partner"
     fields:
