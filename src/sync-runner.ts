@@ -198,6 +198,17 @@ export class SyncRunner {
 
       const maxCursor = maxCursorPoint(records, model.name, model.cursor_field);
 
+      // Guard: if cursor didn't advance, stop to prevent infinite loop.
+      if (pageCursor && maxCursor.value === pageCursor.value && maxCursor.id === pageCursor.id) {
+        this.logger.warn("Pagination cursor did not advance, stopping to avoid infinite loop.", {
+          model: model.name,
+          runId,
+          cursorValue: maxCursor.value,
+          cursorId: maxCursor.id,
+        });
+        return;
+      }
+
       const txClient = await this.pool.connect();
       try {
         await txClient.query("BEGIN");
